@@ -2,24 +2,27 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Megumi Dodging - Bang Bang</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Shadow Cat: Bullet Dodge</title>
     <style>
         body {
             margin: 0;
             padding: 0;
-            background: #05050a;
+            background: #080810;
             display: flex;
             justify-content: center;
             align-items: center;
             height: 100vh;
             overflow: hidden;
+            font-family: sans-serif;
+            user-select: none;
+            -webkit-user-select: none;
         }
         canvas {
-            box-shadow: 0 0 20px rgba(0, 255, 255, 0.2);
+            box-shadow: 0 0 20px rgba(255, 0, 255, 0.2);
+            touch-action: none;
         }
     </style>
-    <!-- Cargamos la librería p5.js para diseño y animación por código -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.6.0/p5.js"></script>
 </head>
 <body>
@@ -27,135 +30,276 @@
 <script>
 let ancho = 360;
 let alto = 640;
-let tiempo = 0;
 
-// Variables de Megumi
-let megumiX;
-let megumiY;
-let targetX;
+// Jugador (Gato)
+let gatoX;
+let gatoY = 500;
+let gatoRadio = 25;
 
-// Control de las 3 balas
+// Listas de entidades
 let balas = [];
+let objetivos = [];
+let misilesPropios = [];
+
+// Estado del juego
+let puntos = 0;
+let balasEsquivadasContador = 0; // Munición guardada
+let modoObjetivos = false;
+let temporizadorModo = 0;
+
+// Tienda y Mejoras
+let puntosTienda = 0;
+let tieneEscudo1 = false;  // Costo 15
+let tieneEscudo2 = false;  // Costo 30
+let objetivosDestruidosTotal = 0;
+let balasEsquivadasTotal = 0;
+
+// Estado del Escudo Activo
+let escudoActivo = false;
+let tiempoEscudoRestante = 0;
 
 function setup() {
     createCanvas(ancho, alto);
-    megumiX = ancho / 2;
-    megumiY = alto - 150;
-    targetX = megumiX;
+    gatoX = ancho / 2;
 }
 
 function draw() {
-    // Fondo estilo anime (oscuridad con líneas de velocidad sutiles)
-    background(10, 10, 18, 80); 
-    tiempo += 1 / 60; // Simulamos el paso del tiempo a 60 fps
-
-    // DIBUJAR LÍNEAS DE VELOCIDAD DE FONDO
-    stroke(255, 255, 255, 30);
-    strokeWeight(1);
-    for (let i = 0; i < 5; i++) {
-        let ly = (frameCount * 10 + i * 150) % alto;
-        line(random(ancho), ly, random(ancho), ly + 40);
+    background(15, 15, 25);
+    
+    // Dibujar líneas de fondo de velocidad
+    stroke(255, 255, 255, 20);
+    for (let i = 0; i < 3; i++) {
+        let ly = (frameCount * 5 + i * 200) % (alto - 120);
+        line(120 * i + 60, ly, 120 * i + 60, ly + 30);
     }
 
-    // LÓGICA DE LOS DISPAROS (Tiempos aproximados del "Bang Bang Bang")
-    // Bala 1 (Segundo 1.5)
-    if (frameCount === 90) dispararBala(ancho / 2 - 40, -50, 0, 25);
-    // Bala 2 (Segundo 2.0)
-    if (frameCount === 120) dispararBala(ancho / 2 + 50, -50, -5, 28);
-    // Bala 3 (Segundo 2.5)
-    if (frameCount === 150) dispararBala(ancho / 2 - 10, -50, 2, 32);
+    // --- SISTEMA DE SELECCIÓN DE FASES ---
+    temporizadorModo++;
+    if (!modoObjetivos && temporizadorModo > 400) { // Cada ~7 segundos de esquivar
+        if (balasEsquivadasContador > 0) {
+            modoObjetivos = true;
+            temporizadorModo = 0;
+        }
+    } else if (modoObjetivos && (objetivos.length === 0 && misilesPropios.length === 0 && temporizadorModo > 200)) {
+        modoObjetivos = false;
+        temporizadorModo = 0;
+    }
 
-    // Actualizar y pintar balas
+    // --- LOGICA DE MOVIMIENTO (TOUCH / MOUSE) ---
+    if (mouseIsPressed && mouseY < alto - 120) {
+        gatoX = lerp(gatoX, mouseX, 0.2);
+    }
+    gatoX = constrain(gatoX, gatoRadio, ancho - gatoRadio);
+
+    // --- MANEJO DE ESCUDOS ---
+    if (escudoActivo) {
+        tiempoEscudoRestante--;
+        if (tiempoEscudoRestante <= 0) {
+            escudoActivo = false;
+        }
+        // Dibujar Escudo Visual
+        noFill();
+        stroke(0, 255, 255, 200);
+        strokeWeight(4);
+        ellipse(gatoX, gatoY, gatoRadio * 2.5);
+    }
+
+    // --- FASE 1: CAEN BALAS ---
+    if (!modoObjetivos) {
+        if (frameCount % 20 === 0) {
+            balas.push({ x: random(20, ancho - 20), y: -10, vy: random(5, 8) });
+        }
+    } else {
+        // --- FASE 2: CAEN OBJETIVOS Y DISPARAS ---
+        if (frameCount % 30 === 0 && objetivos.length < balasEsquivadasContador) {
+            objetivos.push({ x: random(30, ancho - 30), y: -20, vy: 3, vida: 1 });
+        }
+        // El gato dispara automáticamente las balas que guardó
+        if (frameCount % 15 === 0 && balasEsquivadasContador > 0) {
+            misilesPropios.push({ x: gatoX, y: gatoY - 20, vy: -10 });
+            balasEsquivadasContador--;
+        }
+    }
+
+    // --- ACTUALIZAR Y DIBUJAR BALAS ENEMIGAS ---
     for (let i = balas.length - 1; i >= 0; i--) {
         balas[i].y += balas[i].vy;
-        balas[i].x += balas[i].vx;
         
-        // Estilo de la bala (Trazo de luz azul/blanco)
-        stroke(0, 255, 255);
-        strokeWeight(4);
-        line(balas[i].x, balas[i].y, balas[i].x - balas[i].vx*2, balas[i].y - balas[i].vy*2);
-        
-        // Detectar si la bala se acerca para que Megumi esquive
-        if (balas[i].y > megumiY - 120 && balas[i].y < megumiY + 50) {
-            if (abs(balas[i].x - targetX) < 60) {
-                // Si la bala va a golpearlo, cambia su destino bruscamente a la izquierda o derecha
-                targetX = (balas[i].x > ancho/2) ? ancho/2 - 90 : ancho/2 + 90;
+        // Render Bala
+        stroke(0, 180, 255);
+        strokeWeight(3);
+        line(balas[i].x, balas[i].y, balas[i].x, balas[i].y - 15);
+
+        // Colisión con el Gato
+        let d = dist(balas[i].x, balas[i].y, gatoX, gatoY);
+        if (d < gatoRadio) {
+            if (escudoActivo) {
+                balas.splice(i, 1);
+                continue;
+            } else {
+                // Reiniciar juego si te pegan
+                puntos = 0;
+                balasEsquivadasContador = 0;
+                balas = [];
+                objetivos = [];
+                modoObjetivos = false;
+                balasEsquivadasTotal = 0;
+                objetivosDestruidosTotal = 0;
             }
         }
+        // Si pasa el límite del gato sanamente, la esquivaste
+        else if (balas[i].y > gatoY + 30) {
+            balasEsquivadasContador++;
+            balasEsquivadasTotal++;
+            
+            // LOGICA MEJORA 2: 10 balas esquivadas = Escudo 10 seg (600 frames)
+            if (tieneEscudo2 && balasEsquivadasTotal % 10 === 0) {
+                escudoActivo = true;
+                tiempoEscudoRestante = 600; 
+            }
+            balas.splice(i, 1);
+        }
+    }
+
+    // --- ACTUALIZAR OBJETIVOS EN PANTALLA ---
+    for (let i = objetivos.length - 1; i >= 0; i--) {
+        objetivos[i].y += objetivos[i].vy;
         
-        // Eliminar balas fuera de pantalla
-        if (balas[i].y > alto) balas.splice(i, 1);
+        // Render Objetivo (Hexágono/Cuadrado rojo)
+        fill(255, 50, 50);
+        noStroke();
+        rectMode(CENTER);
+        rect(objetivos[i].x, objetivos[i].y, 25, 25, 5);
+
+        // Si toca al gato (No te mata, pero se pierde el objetivo)
+        if (dist(objetivos[i].x, objetivos[i].y, gatoX, gatoY) < gatoRadio + 12) {
+            objetivos.splice(i, 1);
+        } else if (objetivos[i].y > alto - 120) {
+            objetivos.splice(i, 1);
+        }
     }
 
-    // Regresar al centro suavemente si no hay peligro
-    if (balas.length === 0) {
-        targetX = ancho / 2;
+    // --- ACTUALIZAR TUS DISPAROS ---
+    for (let i = misilesPropios.length - 1; i >= 0; i--) {
+        misilesPropios[i].y += misilesPropios[i].vy;
+        
+        // Render Misil
+        stroke(255, 200, 0);
+        strokeWeight(4);
+        line(misilesPropios[i].x, misilesPropios[i].y, misilesPropios[i].x, misilesPropios[i].y + 10);
+
+        // Colisión Misil contra Objetivo
+        for (let j = objetivos.length - 1; j >= 0; j--) {
+            if (dist(misilesPropios[i].x, misilesPropios[i].y, objetivos[j].x, objetivos[j].y) < 20) {
+                objetivos.splice(j, 1);
+                misilesPropios.splice(i, 1);
+                puntos++;
+                objetivosDestruidosTotal++;
+
+                // LOGICA MEJORA 1: 10 objetivos destruidos = Escudo 5 seg (300 frames)
+                if (tieneEscudo1 && objetivosDestruidosTotal % 10 === 0) {
+                    escudoActivo = true;
+                    tiempoEscudoRestante = 300;
+                }
+                break;
+            }
+        }
+        if (misilesPropios[i] && misilesPropios[i].y < 0) misilesPropios.splice(i, 1);
     }
 
-    // Interpolar la posición de Megumi para un movimiento fluido (Lerp)
-    megumiX = lerp(megumiX, targetX, 0.25);
-
-    // DIBUJAR A MEGUMI (Silueta estilo Anime/Manga)
+    // --- DIBUJAR AL JUGADOR (SOMBRA DE GATO) ---
     push();
-    translate(megumiX, megumiY);
+    translate(gatoX, gatoY);
     
-    // Aura de energía maldita si está esquivando
-    if (abs(megumiX - ancho/2) > 20) {
-        noFill();
-        stroke(100, 0, 255, 150);
-        strokeWeight(random(2, 6));
-        ellipse(0, -40, 90 + random(10), 130 + random(10));
-    }
-
-    // Ropa / Hombros
+    // Cuerpo/Silueta negra
+    fill(10, 10, 15);
     noStroke();
-    fill(20, 24, 35); // Azul oscuro Jujutsu
+    ellipse(0, 0, gatoRadio * 2, gatoRadio * 1.6); // Cuerpo
+    ellipse(0, -20, gatoRadio * 1.4, gatoRadio * 1.4); // Cabeza
+    
+    // Orejas puntiagudas
+    triangle(-12, -25, -5, -15, -18, -35); // Izquierda
+    triangle(12, -25, 5, -15, 18, -35);  // Derecha
+    
+    // Ojos brillantes amarillos/verdes
+    fill(200, 255, 0);
+    ellipse(-6, -22, 5, 8);
+    ellipse(6, -22, 5, 8);
+    // Pupilas rasgadas
+    fill(0);
     rectMode(CENTER);
-    rect(0, 30, 80, 60, 10);
-    
-    // Cuello alto del uniforme
-    fill(15, 18, 26);
-    quad(-15, 0, 15, 0, 20, -25, -20, -25);
-
-    // Cabeza / Rostro
-    fill(245, 222, 179); // Color piel
-    ellipse(0, -35, 40, 50);
-
-    // PEINADO PUNTIAGUDO DE MEGUMI (Vértices de los picos)
-    fill(10, 12, 18); // Pelo negro
-    beginShape();
-    vertex(-25, -35);
-    vertex(-45, -55); // Pico izq bajo
-    vertex(-25, -50);
-    vertex(-40, -75); // Pico izq alto
-    vertex(-15, -60);
-    vertex(-15, -90); // Pico central alto 1
-    vertex(0, -65);
-    vertex(15, -90);  // Pico central alto 2
-    vertex(15, -60);
-    vertex(40, -75);  // Pico der alto
-    vertex(25, -50);
-    vertex(45, -55);  // Pico der bajo
-    vertex(20, -35);
-    vertex(0, -20);
-    endShape(CLOSE);
-    
-    // Ojos serios (Líneas anime)
-    stroke(10, 12, 18);
-    strokeWeight(3);
-    line(-12, -38, -4, -36);
-    line(12, -38, 4, -36);
-
+    rect(-6, -22, 1, 6);
+    rect(6, -22, 1, 6);
     pop();
+
+    // --- INTERFAZ EN PANTALLA ---
+    fill(255);
+    noStroke();
+    textSize(18);
+    textAlign(LEFT);
+    text("Puntos: " + puntos, 20, 40);
     
-    // Presiona la pantalla para reiniciar la secuencia de disparos
-    if (frameCount > 220) {
-        frameCount = 0; 
+    textAlign(RIGHT);
+    if (!modoObjetivos) {
+        fill(0, 255, 255);
+        text("Balas Guardadas: " + balasEsquivadasContador, ancho - 20, 40);
+    } else {
+        fill(255, 150, 0);
+        text("¡FUEGO! Munición: " + balasEsquivadasContador, ancho - 20, 40);
     }
+
+    // --- TIENDA (ZONA INFERIOR) ---
+    fill(25, 25, 40);
+    rectMode(CORNER);
+    rect(0, alto - 120, ancho, 120);
+    stroke(40, 40, 60);
+    line(0, alto - 120, ancho, alto - 120);
+
+    // Botón Mejora 1 (15 Puntos)
+    dibujarBoton(15, alto - 100, 150, 80, "Escudo 5s\n(10 Kills)", 15, tieneEscudo1);
+    // Botón Mejora 2 (30 Puntos)
+    dibujarBoton(195, alto - 100, 150, 80, "Escudo 10s\n(10 Dodges)", 30, tieneEscudo2);
 }
 
-function dispararBala(x, y, vx, vy) {
-    balas.push({ x: x, y: y, vx: vx, vy: vy });
+function dibujarBoton(x, y, w, h, texto, costo, comprado) {
+    if (comprado) {
+        fill(40, 100, 40); // Verde si ya se compró
+    } else if (puntos >= costo) {
+        fill(80, 40, 120); // Morado si es alcanzable
+    } else {
+        fill(40, 40, 50); // Gris si no tienes suficientes puntos
+    }
+    noStroke();
+    rect(x, y, w, h, 10);
+    
+    fill(255);
+    textAlign(CENTER, CENTER);
+    textSize(12);
+    text(texto, x + w/2, y + h/2 - 10);
+    
+    textSize(14);
+    fill(255, 200, 0);
+    text(comprado ? "ACTIVO" : costo + " PTS", x + w/2, y + h/2 + 20);
+}
+
+// Detectar clics en la tienda
+function mousePressed() {
+    if (mouseY > alto - 120) {
+        // Clic en Botón 1
+        if (mouseX > 15 && mouseX < 165 && mouseY > alto - 100 && mouseY < alto - 20) {
+            if (!tieneEscudo1 && puntos >= 15) {
+                puntos -= 15;
+                tieneEscudo1 = true;
+            }
+        }
+        // Clic en Botón 2
+        if (mouseX > 195 && mouseX < 345 && mouseY > alto - 100 && mouseY < alto - 20) {
+            if (!tieneEscudo2 && puntos >= 30) {
+                puntos -= 30;
+                tieneEscudo2 = true;
+            }
+        }
+    }
 }
 </script>
 
