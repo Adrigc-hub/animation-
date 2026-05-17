@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Megumi Dodging - Bang Bang</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background: #05050a;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            overflow: hidden;
+        }
+        canvas {
+            box-shadow: 0 0 20px rgba(0, 255, 255, 0.2);
+        }
+    </style>
+    <!-- Cargamos la librería p5.js para diseño y animación por código -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.6.0/p5.js"></script>
+</head>
+<body>
+
+<script>
+let ancho = 360;
+let alto = 640;
+let tiempo = 0;
+
+// Variables de Megumi
+let megumiX;
+let megumiY;
+let targetX;
+
+// Control de las 3 balas
+let balas = [];
+
+function setup() {
+    createCanvas(ancho, alto);
+    megumiX = ancho / 2;
+    megumiY = alto - 150;
+    targetX = megumiX;
+}
+
+function draw() {
+    // Fondo estilo anime (oscuridad con líneas de velocidad sutiles)
+    background(10, 10, 18, 80); 
+    tiempo += 1 / 60; // Simulamos el paso del tiempo a 60 fps
+
+    // DIBUJAR LÍNEAS DE VELOCIDAD DE FONDO
+    stroke(255, 255, 255, 30);
+    strokeWeight(1);
+    for (let i = 0; i < 5; i++) {
+        let ly = (frameCount * 10 + i * 150) % alto;
+        line(random(ancho), ly, random(ancho), ly + 40);
+    }
+
+    // LÓGICA DE LOS DISPAROS (Tiempos aproximados del "Bang Bang Bang")
+    // Bala 1 (Segundo 1.5)
+    if (frameCount === 90) dispararBala(ancho / 2 - 40, -50, 0, 25);
+    // Bala 2 (Segundo 2.0)
+    if (frameCount === 120) dispararBala(ancho / 2 + 50, -50, -5, 28);
+    // Bala 3 (Segundo 2.5)
+    if (frameCount === 150) dispararBala(ancho / 2 - 10, -50, 2, 32);
+
+    // Actualizar y pintar balas
+    for (let i = balas.length - 1; i >= 0; i--) {
+        balas[i].y += balas[i].vy;
+        balas[i].x += balas[i].vx;
+        
+        // Estilo de la bala (Trazo de luz azul/blanco)
+        stroke(0, 255, 255);
+        strokeWeight(4);
+        line(balas[i].x, balas[i].y, balas[i].x - balas[i].vx*2, balas[i].y - balas[i].vy*2);
+        
+        // Detectar si la bala se acerca para que Megumi esquive
+        if (balas[i].y > megumiY - 120 && balas[i].y < megumiY + 50) {
+            if (abs(balas[i].x - targetX) < 60) {
+                // Si la bala va a golpearlo, cambia su destino bruscamente a la izquierda o derecha
+                targetX = (balas[i].x > ancho/2) ? ancho/2 - 90 : ancho/2 + 90;
+            }
+        }
+        
+        // Eliminar balas fuera de pantalla
+        if (balas[i].y > alto) balas.splice(i, 1);
+    }
+
+    // Regresar al centro suavemente si no hay peligro
+    if (balas.length === 0) {
+        targetX = ancho / 2;
+    }
+
+    // Interpolar la posición de Megumi para un movimiento fluido (Lerp)
+    megumiX = lerp(megumiX, targetX, 0.25);
+
+    // DIBUJAR A MEGUMI (Silueta estilo Anime/Manga)
+    push();
+    translate(megumiX, megumiY);
+    
+    // Aura de energía maldita si está esquivando
+    if (abs(megumiX - ancho/2) > 20) {
+        noFill();
+        stroke(100, 0, 255, 150);
+        strokeWeight(random(2, 6));
+        ellipse(0, -40, 90 + random(10), 130 + random(10));
+    }
+
+    // Ropa / Hombros
+    noStroke();
+    fill(20, 24, 35); // Azul oscuro Jujutsu
+    rectMode(CENTER);
+    rect(0, 30, 80, 60, 10);
+    
+    // Cuello alto del uniforme
+    fill(15, 18, 26);
+    quad(-15, 0, 15, 0, 20, -25, -20, -25);
+
+    // Cabeza / Rostro
+    fill(245, 222, 179); // Color piel
+    ellipse(0, -35, 40, 50);
+
+    // PEINADO PUNTIAGUDO DE MEGUMI (Vértices de los picos)
+    fill(10, 12, 18); // Pelo negro
+    beginShape();
+    vertex(-25, -35);
+    vertex(-45, -55); // Pico izq bajo
+    vertex(-25, -50);
+    vertex(-40, -75); // Pico izq alto
+    vertex(-15, -60);
+    vertex(-15, -90); // Pico central alto 1
+    vertex(0, -65);
+    vertex(15, -90);  // Pico central alto 2
+    vertex(15, -60);
+    vertex(40, -75);  // Pico der alto
+    vertex(25, -50);
+    vertex(45, -55);  // Pico der bajo
+    vertex(20, -35);
+    vertex(0, -20);
+    endShape(CLOSE);
+    
+    // Ojos serios (Líneas anime)
+    stroke(10, 12, 18);
+    strokeWeight(3);
+    line(-12, -38, -4, -36);
+    line(12, -38, 4, -36);
+
+    pop();
+    
+    // Presiona la pantalla para reiniciar la secuencia de disparos
+    if (frameCount > 220) {
+        frameCount = 0; 
+    }
+}
+
+function dispararBala(x, y, vx, vy) {
+    balas.push({ x: x, y: y, vx: vx, vy: vy });
+}
+</script>
+
+</body>
+</html>
